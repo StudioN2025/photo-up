@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>AI Image Upscaler — Real-CUGAN 4x в браузере</title>
+    <title>AI Image Upscaler — Real-CUGAN 4x с загрузочным экраном</title>
     <!-- TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <style>
@@ -20,8 +20,139 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            position: relative;
         }
 
+        /* ========== ЗАГРУЗОЧНЫЙ ЭКРАН ========== */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #0a0f1c 0%, #05070f 100%);
+            backdrop-filter: blur(20px);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.6s;
+            will-change: opacity;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .loading-card {
+            background: rgba(18, 24, 36, 0.9);
+            border-radius: 2rem;
+            padding: 2.5rem;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            animation: fadeInUp 0.5s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .loading-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1.5rem;
+            position: relative;
+        }
+
+        .loading-icon svg {
+            width: 100%;
+            height: 100%;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.08); opacity: 0.85; }
+        }
+
+        .loading-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            background: linear-gradient(120deg, #E9F1FF, #A0D6FF, #6C8CFF);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            margin-bottom: 0.75rem;
+        }
+
+        .loading-sub {
+            color: #8e9bb5;
+            font-size: 0.85rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .loading-progress-container {
+            background: #1a1f2e;
+            border-radius: 60px;
+            height: 8px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .loading-progress-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            border-radius: 60px;
+            transition: width 0.3s ease;
+        }
+
+        .loading-status-text {
+            font-size: 0.8rem;
+            color: #b9ceff;
+            margin-top: 0.75rem;
+            font-family: monospace;
+        }
+
+        .loading-dots {
+            display: inline-block;
+            width: 24px;
+            text-align: left;
+        }
+
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+
+        .tip-text {
+            font-size: 0.7rem;
+            color: #5a6a8a;
+            margin-top: 1.5rem;
+            border-top: 1px solid #2a3348;
+            padding-top: 1rem;
+        }
+
+        /* ========== ОСНОВНОЙ ИНТЕРФЕЙС ========== */
         .container {
             max-width: 1400px;
             width: 100%;
@@ -30,6 +161,7 @@
             border-radius: 2rem;
             box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
             padding: 1.75rem;
+            transition: opacity 0.4s;
         }
 
         h1 {
@@ -212,18 +344,54 @@
         @media (max-width: 780px) {
             .container { padding: 1rem; }
             .panel { padding: 0.9rem; }
+            .loading-card { padding: 1.75rem; }
+            .loading-title { font-size: 1.3rem; }
         }
     </style>
 </head>
 <body>
-<div class="container">
+
+<!-- ЗАГРУЗОЧНЫЙ ЭКРАН -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-card">
+        <div class="loading-icon">
+            <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#3b82f6"/>
+                        <stop offset="100%" stop-color="#8b5cf6"/>
+                    </linearGradient>
+                </defs>
+                <rect x="25" y="35" width="50" height="30" rx="6" fill="url(#grad)" opacity="0.9"/>
+                <circle cx="50" cy="55" r="10" fill="#0a0f1c" stroke="url(#grad)" stroke-width="2"/>
+                <path d="M35 45 L40 50 L45 43" stroke="url(#grad)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                <path d="M65 45 L60 50 L55 43" stroke="url(#grad)" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+                <rect x="38" y="65" width="24" height="4" rx="2" fill="url(#grad)" opacity="0.6"/>
+                <!-- анимированные лучи -->
+                <circle cx="50" cy="50" r="30" stroke="url(#grad)" stroke-width="1" stroke-dasharray="4 6" opacity="0.5">
+                    <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="8s" repeatCount="indefinite"/>
+                </circle>
+            </svg>
+        </div>
+        <div class="loading-title">AI Image Upscaler</div>
+        <div class="loading-sub">Загрузка нейросети Real-CUGAN 4x</div>
+        <div class="loading-progress-container">
+            <div class="loading-progress-fill" id="loadingProgressFill"></div>
+        </div>
+        <div class="loading-status-text" id="loadingStatusText">Подготовка<span class="loading-dots"></span></div>
+        <div class="tip-text">💡 Первый запуск: загрузка модели (~3 МБ)<br>После этого работа полностью офлайн</div>
+    </div>
+</div>
+
+<!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
+<div class="container" id="mainContainer" style="opacity: 0;">
     <div>
         <h1>🖼️ AI Image Upscaler</h1>
         <div class="badge">
             <span>⚡ Real-CUGAN нейросеть</span>
             <span>📈 Увеличение 4x</span>
             <span>🔒 Локальная обработка</span>
-            <span>🎯 До 4608x4608px</span>
+            <span>🎯 До 4096x4096px</span>
         </div>
     </div>
 
@@ -247,13 +415,12 @@
                 <div class="progress-fill" id="progressFill"></div>
             </div>
             <button id="downloadBtn" class="download-btn" disabled>💾 Скачать результат (PNG)</button>
-            <div id="statusMsg" class="status">✅ Готов. Загрузите фото для начала.</div>
+            <div id="statusMsg" class="status">⏳ Инициализация...</div>
         </div>
     </div>
     <div class="info-note">
-        🧠 Используется нейросеть <strong>Real-CUGAN 4x</strong> — современная модель супер-разрешения.<br>
-        📦 Первая загрузка модели (~3 МБ) займет несколько секунд. После этого обработка быстрая.<br>
-        🔥 Модель в 5-10 раз быстрее ESRGAN при сопоставимом качестве!
+        🧠 Нейросеть <strong>Real-CUGAN 4x</strong> — современная модель супер-разрешения от Bilibili.<br>
+        🔥 В 5-10 раз быстрее ESRGAN при сопоставимом качестве. Первая загрузка модели займет несколько секунд.
     </div>
 </div>
 
@@ -268,115 +435,160 @@
         const downloadBtn = document.getElementById('downloadBtn');
         const statusDiv = document.getElementById('statusMsg');
         const progressFill = document.getElementById('progressFill');
+        
+        // Загрузочный экран
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingProgressFill = document.getElementById('loadingProgressFill');
+        const loadingStatusText = document.getElementById('loadingStatusText');
+        const mainContainer = document.getElementById('mainContainer');
 
-        let currentImage = null;        // HTMLImageElement
-        let currentEnhancedCanvas = null; // Canvas с результатом
+        let currentImage = null;
+        let currentEnhancedCanvas = null;
         let model = null;
         let modelLoading = false;
         let modelReady = false;
+        let loadingComplete = false;
 
-        // URL модели Real-CUGAN 4x conservative (рабочая модель с Hugging Face)
-        // Эта модель увеличивает изображение в 4 раза с консервативным шумоподавлением
+        // Модель Real-CUGAN 4x conservative (рабочая ссылка)
         const MODEL_URL = 'https://huggingface.co/shammisw/real-cugan-tensorflowjs/resolve/main/real-cugan-models/realcugan/4x-conservative-64/model.json';
 
+        // Функции управления загрузочным экраном
+        function updateLoadingProgress(percent, text) {
+            if (loadingProgressFill) {
+                loadingProgressFill.style.width = `${Math.min(100, percent)}%`;
+            }
+            if (loadingStatusText) {
+                loadingStatusText.innerHTML = text + '<span class="loading-dots"></span>';
+            }
+        }
+
+        function hideLoadingScreen() {
+            if (!loadingOverlay) return;
+            loadingOverlay.classList.add('hidden');
+            setTimeout(() => {
+                mainContainer.style.opacity = '1';
+                mainContainer.style.transition = 'opacity 0.5s';
+            }, 200);
+        }
+
         function setStatus(text, isLoading = false) {
-            if (isLoading) {
-                statusDiv.innerHTML = `<span class="loader"></span> ${text}`;
-            } else {
-                statusDiv.innerHTML = text;
+            if (statusDiv) {
+                if (isLoading) {
+                    statusDiv.innerHTML = `<span class="loader"></span> ${text}`;
+                } else {
+                    statusDiv.innerHTML = text;
+                }
             }
         }
 
         function setProgress(percent) {
-            progressFill.style.width = `${percent}%`;
+            if (progressFill) {
+                progressFill.style.width = `${percent}%`;
+            }
         }
 
-        // Загрузка модели Real-CUGAN
-        async function loadModel() {
-            if (modelReady) return true;
+        // Загрузка модели с отображением прогресса на загрузочном экране
+        async function loadModelWithLoadingScreen() {
+            if (modelReady) {
+                if (!loadingComplete) {
+                    updateLoadingProgress(100, "Модель готова!");
+                    setTimeout(() => {
+                        hideLoadingScreen();
+                        setStatus("✅ Модель Real-CUGAN готова! Загрузите фото.");
+                    }, 500);
+                    loadingComplete = true;
+                }
+                return true;
+            }
             if (modelLoading) {
-                setStatus("⏳ Модель уже загружается, подождите...", true);
+                updateLoadingProgress(30, "Модель уже загружается");
                 return false;
             }
             
             modelLoading = true;
-            setStatus("📡 Загрузка AI модели Real-CUGAN (~3 МБ)...", true);
-            setProgress(10);
+            updateLoadingProgress(5, "Инициализация TensorFlow.js");
             
             try {
-                // Загружаем модель TensorFlow.js GraphModel
+                // Ждем готовности tf
+                await tf.ready();
+                updateLoadingProgress(10, "Загрузка нейросети Real-CUGAN");
+                
+                // Загружаем модель с прогрессом
                 model = await tf.loadGraphModel(MODEL_URL, {
                     onProgress: (fraction) => {
-                        let percent = Math.round(10 + fraction * 80);
-                        setProgress(Math.min(percent, 90));
-                        setStatus(`📡 Загрузка модели: ${Math.round(fraction * 100)}%`, true);
+                        const percent = 10 + Math.round(fraction * 75);
+                        updateLoadingProgress(percent, `Загрузка модели: ${Math.round(fraction * 100)}%`);
                     }
                 });
                 
+                updateLoadingProgress(90, "Оптимизация модели");
+                await tf.nextFrame();
+                
                 modelReady = true;
-                setProgress(100);
-                setTimeout(() => setProgress(0), 500);
-                setStatus("✅ Модель Real-CUGAN готова! Теперь загрузите фото и нажмите «Увеличить».");
+                updateLoadingProgress(100, "Модель успешно загружена!");
+                
+                setTimeout(() => {
+                    hideLoadingScreen();
+                    setStatus("✅ Модель Real-CUGAN готова! Загрузите фото и нажмите «Увеличить».");
+                }, 800);
+                
+                loadingComplete = true;
                 modelLoading = false;
                 return true;
             } catch (err) {
                 console.error("Ошибка загрузки модели:", err);
-                setStatus("❌ Не удалось загрузить модель. Проверьте интернет и перезагрузите страницу.");
+                updateLoadingProgress(0, "Ошибка загрузки. Проверьте интернет");
+                setStatus("❌ Не удалось загрузить модель. Обновите страницу и проверьте соединение.");
                 modelLoading = false;
                 modelReady = false;
+                // Показываем ошибку, но не скрываем экран полностью
+                setTimeout(() => {
+                    hideLoadingScreen();
+                    setStatus("⚠️ Модель не загружена. Нейросеть недоступна. Проверьте интернет и перезагрузите страницу.");
+                }, 2000);
                 return false;
             }
         }
 
         // Преобразование изображения в тензор
         function imageToTensor(imgElement) {
-            // Получаем размеры, кратные 4 (требование модели для корректной работы)
             let height = imgElement.height;
             let width = imgElement.width;
             
-            // Если размеры не кратны 4, временно изменяем для обработки
             const padHeight = (4 - (height % 4)) % 4;
             const padWidth = (4 - (width % 4)) % 4;
             
             let tensor = tf.browser.fromPixels(imgElement);
             
-            // Применяем паддинг если нужно
             if (padHeight > 0 || padWidth > 0) {
                 tensor = tf.pad(tensor, [[0, padHeight], [0, padWidth], [0, 0]]);
             }
             
-            // Нормализация в диапазон [-1, 1] (требуется для Real-CUGAN)
             const normalized = tensor.toFloat().div(tf.scalar(127.5)).sub(tf.scalar(1));
             const batched = normalized.expandDims(0);
             tensor.dispose();
             return batched;
         }
 
-        // Обработка через нейросеть
-        async function processWithRealCUGAN(imgElement) {
+        // Обработка через нейросеть с прогрессом
+        async function processWithRealCUGAN(imgElement, onProgress) {
             if (!modelReady) {
                 throw new Error("Модель не загружена");
             }
             
-            setStatus("🧠 Нейросеть обрабатывает изображение...", true);
-            setProgress(10);
+            if (onProgress) onProgress(10, "Подготовка изображения...");
             
             const inputTensor = imageToTensor(imgElement);
-            setProgress(30);
+            if (onProgress) onProgress(25, "Нейросеть обрабатывает...");
             
             try {
-                // Прогон через модель
                 const outputTensor = await model.predict(inputTensor);
-                setProgress(70);
+                if (onProgress) onProgress(65, "Постобработка...");
                 
-                // Убираем batch dimension
                 const squeezed = outputTensor.squeeze(0);
-                
-                // Денормализация из [-1, 1] в [0, 255]
                 const denormalized = squeezed.add(tf.scalar(1)).div(tf.scalar(2)).mul(tf.scalar(255));
                 const uint8Tensor = denormalized.clipByValue(0, 255).toInt();
                 
-                // Конвертируем в ImageData
                 const [height, width, channels] = uint8Tensor.shape;
                 const pixels = await uint8Tensor.data();
                 
@@ -387,19 +599,15 @@
                 const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
                 ctx.putImageData(imageData, 0, 0);
                 
-                // Очистка тензоров
                 inputTensor.dispose();
                 outputTensor.dispose();
                 squeezed.dispose();
                 denormalized.dispose();
                 uint8Tensor.dispose();
                 
-                setProgress(100);
-                setTimeout(() => setProgress(0), 500);
-                
+                if (onProgress) onProgress(100, "Готово!");
                 return canvas;
             } catch (err) {
-                console.error("Ошибка при обработке:", err);
                 inputTensor.dispose();
                 throw err;
             }
@@ -414,9 +622,9 @@
             
             if (!modelReady) {
                 setStatus("🔄 Загружаем модель перед обработкой...", true);
-                const loaded = await loadModel();
+                const loaded = await loadModelWithLoadingScreen();
                 if (!loaded) {
-                    setStatus("❌ Не удалось загрузить модель. Попробуйте обновить страницу.");
+                    setStatus("❌ Не удалось загрузить модель. Обновите страницу.");
                     return;
                 }
             }
@@ -424,22 +632,28 @@
             enhanceBtn.disabled = true;
             enhanceBtn.textContent = "⏳ Обработка нейросетью...";
             downloadBtn.disabled = true;
+            setProgress(0);
             
             try {
-                const resultCanvas = await processWithRealCUGAN(currentImage);
+                const resultCanvas = await processWithRealCUGAN(currentImage, (percent, msg) => {
+                    setProgress(percent);
+                    setStatus(msg, true);
+                });
                 currentEnhancedCanvas = resultCanvas;
                 
-                // Отображаем результат
                 const img = document.createElement('img');
                 img.src = resultCanvas.toDataURL('image/png');
                 enhancedArea.innerHTML = '';
                 enhancedArea.appendChild(img);
                 
                 downloadBtn.disabled = false;
-                setStatus("✅ Улучшение завершено! Изображение увеличено в 4 раза с восстановлением деталей.");
+                setProgress(100);
+                setStatus("✅ Улучшение завершено! Изображение увеличено в 4x с восстановлением деталей.");
+                setTimeout(() => setProgress(0), 1500);
             } catch (err) {
                 console.error(err);
-                setStatus("❌ Ошибка при обработке. Попробуйте другое изображение (меньшего размера) или обновите страницу.");
+                setStatus("❌ Ошибка при обработке. Попробуйте другое изображение (меньшего размера).");
+                setProgress(0);
             } finally {
                 enhanceBtn.disabled = false;
                 enhanceBtn.textContent = "🚀 Увеличить и улучшить (4x)";
@@ -457,13 +671,11 @@
                     currentImage = img;
                     currentEnhancedCanvas = null;
                     
-                    // Отображаем оригинал
                     originalArea.innerHTML = '';
                     const displayImg = document.createElement('img');
                     displayImg.src = e.target.result;
                     originalArea.appendChild(displayImg);
                     
-                    // Сбрасываем улучшенную область
                     enhancedArea.innerHTML = '<div class="placeholder">⚡ Нажмите «Увеличить» для обработки нейросетью</div>';
                     
                     enhanceBtn.disabled = false;
@@ -494,14 +706,11 @@
             }
         });
         
-        // Предзагрузка модели в фоне
-        setTimeout(() => {
-            if (!modelReady && !modelLoading) {
-                loadModel().catch(console.warn);
-            }
-        }, 500);
-        
-        setStatus("🟢 Приложение готово. Загрузите изображение (PNG/JPG) для увеличения в 4x.");
+        // Старт: показываем загрузочный экран и загружаем модель
+        (async function init() {
+            setStatus("⏳ Инициализация, загрузка модели...", true);
+            await loadModelWithLoadingScreen();
+        })();
     })();
 </script>
 </body>

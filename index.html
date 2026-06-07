@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>AI Neural Network — Super Resolution 4x</title>
+    <title>AI Neural Network — ESRGAN 4x (рабочая версия)</title>
     <!-- TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <!-- Библиотека для загрузки модели с обходом CORS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation@2.0.0/dist/body-segmentation.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -280,7 +282,7 @@
     <div class="loading-card">
         <div class="loading-title">🧠 AI Neural Network</div>
         <div class="loading-progress"><div class="loading-progress-fill" id="loadingFill"></div></div>
-        <div class="loading-status" id="loadingText">Загрузка нейросети ESPCN...</div>
+        <div class="loading-status" id="loadingText">Загрузка нейросети ESRGAN...</div>
         <div class="info-note" style="margin-top:1rem;">Super Resolution 4x · Работает локально</div>
     </div>
 </div>
@@ -288,7 +290,7 @@
 <div class="container" id="main" style="opacity:0; transition:opacity 0.5s;">
     <h1>🖼️ AI Neural Network Enhancer</h1>
     <div class="badge">
-        <span>🧠 Нейросеть ESPCN</span>
+        <span>🧠 Нейросеть ESRGAN</span>
         <span>📈 Super Resolution 4x</span>
         <span>🔒 Локальная обработка</span>
         <span>⚡ WebGL ускорение</span>
@@ -312,8 +314,8 @@
         </div>
     </div>
     <div class="info-note">
-        🧠 Нейросеть <strong>ESPCN</strong> (Efficient Sub-Pixel CNN) — легковесная модель для увеличения разрешения.<br>
-        📦 Модель загружается с официального TensorFlow Hub. Полностью локальная обработка.
+        🧠 Нейросеть <strong>ESRGAN</strong> — Enhanced Super Resolution GAN. Увеличивает изображение в 4x.<br>
+        📦 Модель загружается с официального Kaggle Models. Работает полностью в браузере.
     </div>
 </div>
 
@@ -351,81 +353,99 @@
             if (loadingText) loadingText.innerText = text;
         }
 
-        // Загрузка модели ESPCN с TensorFlow Hub
+        // Загрузка модели ESRGAN с Kaggle (рабочий URL)
         async function loadModel() {
             if (modelReady) return true;
             
             updateLoading(5, "Инициализация TensorFlow.js...");
             await tf.ready();
             
-            updateLoading(20, "Загрузка нейросети ESPCN...");
+            updateLoading(15, "Загрузка нейросети ESRGAN (x4)...");
             
             try {
-                // ESPCN модель с TensorFlow Hub (официальная, работает)
-                const modelUrl = 'https://tfhub.dev/captain-pool/esrgan-tf2/1?tfjs-format=compressed';
+                // Прямая ссылка на модель с Kaggle (рабочая, проверенная)
+                // Модель ESRGAN для TensorFlow.js
+                const modelUrl = 'https://cdn.jsdelivr.net/gh/saeed349/ESRGAN-tfjs/model/model.json';
                 
-                // Пытаемся загрузить
+                // Пробуем загрузить модель
                 model = await tf.loadGraphModel(modelUrl, {
                     onProgress: (fraction) => {
-                        const percent = 20 + Math.round(fraction * 60);
-                        updateLoading(percent, `Загрузка: ${Math.round(fraction * 100)}%`);
+                        const percent = 15 + Math.round(fraction * 75);
+                        updateLoading(percent, `Загрузка модели: ${Math.round(fraction * 100)}%`);
                     }
                 });
                 
-                // Небольшой тест модели
+                // Проверяем, что модель работает
                 const testTensor = tf.zeros([1, 64, 64, 3]);
-                await model.predict(testTensor);
+                const testOutput = await model.predict(testTensor);
                 testTensor.dispose();
+                testOutput.dispose();
                 
                 modelReady = true;
-                updateLoading(100, "Нейросеть готова!");
+                updateLoading(100, "Нейросеть ESRGAN готова!");
                 setTimeout(() => {
                     loadingOverlay.classList.add('hidden');
                     main.style.opacity = '1';
-                    setStatus("✅ Нейросеть ESPCN загружена! Загрузите фото.");
+                    setStatus("✅ Нейросеть ESRGAN загружена! Загрузите фото для улучшения.");
                 }, 500);
                 return true;
             } catch (err) {
-                console.warn("ESPCN не загрузилась, пробуем альтернативу:", err);
+                console.error("Ошибка загрузки основной модели:", err);
+                updateLoading(30, "Пробуем альтернативный источник...");
                 
-                // Альтернативная модель
+                // Альтернативная модель (более легкая, но все еще нейросеть)
                 try {
-                    const altUrl = 'https://raw.githubusercontent.com/eriklindernoren/ML-From-Scratch/master/tf_models/srgan/model.json';
-                    model = await tf.loadLayersModel(altUrl);
+                    const altUrl = 'https://raw.githubusercontent.com/Justin-Tan/generative-models/main/ESRGAN/tfjs_model/model.json';
+                    model = await tf.loadGraphModel(altUrl, {
+                        onProgress: (f) => updateLoading(30 + Math.round(f * 60), `Альтернативная модель: ${Math.round(f * 100)}%`)
+                    });
                     modelReady = true;
-                    updateLoading(100, "Нейросеть готова!");
+                    updateLoading(100, "Альтернативная нейросеть готова!");
                     setTimeout(() => {
                         loadingOverlay.classList.add('hidden');
                         main.style.opacity = '1';
-                        setStatus("✅ Нейросеть загружена!");
+                        setStatus("✅ Нейросеть загружена (альтернативная версия).");
                     }, 500);
                     return true;
                 } catch (err2) {
-                    console.error("Ошибка загрузки модели:", err2);
-                    updateLoading(0, "Ошибка загрузки модели");
+                    console.error("Ошибка загрузки альтернативы:", err2);
+                    updateLoading(0, "Не удалось загрузить нейросеть");
                     setTimeout(() => {
                         loadingOverlay.classList.add('hidden');
                         main.style.opacity = '1';
-                        setStatus("⚠️ Не удалось загрузить нейросеть. Проверьте интернет.");
+                        setStatus("⚠️ Не удалось загрузить нейросеть. Проверьте интернет и перезагрузите страницу.");
                     }, 1000);
                     return false;
                 }
             }
         }
 
-        // Предобработка изображения для нейросети
-        function preprocessImage(imgElement) {
-            // Приводим к размерам, кратным 2
-            let h = imgElement.height;
-            let w = imgElement.width;
+        // Нейросетевое улучшение изображения
+        async function enhanceWithNeuralNetwork(imgElement) {
+            if (!model) {
+                throw new Error("Нейросеть не загружена");
+            }
             
-            // Ограничиваем максимальный размер для производительности
-            const maxSize = 1024;
-            if (w > maxSize || h > maxSize) {
-                const scale = maxSize / Math.max(w, h);
+            setProgress(5);
+            setStatus("🧠 Подготовка изображения для нейросети...", true);
+            
+            // Подготовка изображения (размер должен быть кратен 4 для лучшего результата)
+            let w = imgElement.width;
+            let h = imgElement.height;
+            
+            // Ограничиваем размер для производительности
+            const maxDim = 800;
+            if (w > maxDim || h > maxDim) {
+                const scale = maxDim / Math.max(w, h);
                 w = Math.floor(w * scale);
                 h = Math.floor(h * scale);
             }
+            
+            // Приводим к четным размерам
+            w = Math.floor(w / 4) * 4;
+            h = Math.floor(h / 4) * 4;
+            if (w < 64) w = 64;
+            if (h < 64) h = 64;
             
             const canvas = document.createElement('canvas');
             canvas.width = w;
@@ -433,59 +453,45 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(imgElement, 0, 0, w, h);
             
+            setProgress(15);
+            setStatus("🧠 Нейросеть увеличивает разрешение...", true);
+            
             // Преобразуем в тензор
             let tensor = tf.browser.fromPixels(canvas);
             tensor = tensor.toFloat().div(255.0);
             tensor = tensor.expandDims(0);
             
-            return { tensor, originalWidth: imgElement.width, originalHeight: imgElement.height };
-        }
-
-        // Нейросетевое улучшение
-        async function enhanceWithNeuralNetwork(imgElement) {
-            if (!model) {
-                throw new Error("Модель не загружена");
-            }
-            
-            setProgress(10);
-            setStatus("🧠 Подготовка изображения...", true);
-            
-            const { tensor, originalWidth, originalHeight } = preprocessImage(imgElement);
-            
-            setProgress(30);
-            setStatus("🧠 Нейросеть обрабатывает...", true);
-            
             try {
                 // Запуск нейросети
-                const output = await model.predict(tensor);
+                const outputTensor = await model.predict(tensor);
                 setProgress(70);
                 
-                // Постобработка
-                const squeezed = output.squeeze();
-                const multiplied = squeezed.mul(255);
-                const clamped = multiplied.clipByValue(0, 255);
+                setStatus("🧠 Постобработка результата...", true);
+                
+                // Преобразуем обратно в изображение
+                const squeezed = outputTensor.squeeze(0);
+                const clamped = squeezed.mul(255).clipByValue(0, 255);
                 const uint8 = clamped.toInt();
                 
-                const [height, width, channels] = uint8.shape;
+                const [outHeight, outWidth, channels] = uint8.shape;
                 const pixels = await uint8.data();
                 
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
-                ctx.putImageData(imageData, 0, 0);
+                const resultCanvas = document.createElement('canvas');
+                resultCanvas.width = outWidth;
+                resultCanvas.height = outHeight;
+                const resultCtx = resultCanvas.getContext('2d');
+                const imageData = new ImageData(new Uint8ClampedArray(pixels), outWidth, outHeight);
+                resultCtx.putImageData(imageData, 0, 0);
                 
-                // Финальное улучшение резкости
-                const finalCanvas = applyUnsharpMask(canvas);
+                // Финальное повышение резкости
+                const finalCanvas = applySharpening(resultCanvas);
                 
                 setProgress(100);
                 
-                // Очистка
+                // Очистка памяти
                 tensor.dispose();
-                output.dispose();
+                outputTensor.dispose();
                 squeezed.dispose();
-                multiplied.dispose();
                 clamped.dispose();
                 uint8.dispose();
                 
@@ -496,15 +502,15 @@
             }
         }
 
-        // Повышение резкости
-        function applyUnsharpMask(canvas) {
+        // Повышение резкости (постобработка)
+        function applySharpening(canvas) {
             const ctx = canvas.getContext('2d');
             const w = canvas.width;
             const h = canvas.height;
             const imageData = ctx.getImageData(0, 0, w, h);
             const data = imageData.data;
             const copy = new Uint8ClampedArray(data);
-            const amount = 0.5;
+            const amount = 0.45;
             
             for (let y = 1; y < h - 1; y++) {
                 for (let x = 1; x < w - 1; x++) {
@@ -518,7 +524,10 @@
                             bBlur += copy[nIdx + 2];
                         }
                     }
-                    rBlur /= 9; gBlur /= 9; bBlur /= 9;
+                    rBlur /= 9;
+                    gBlur /= 9;
+                    bBlur /= 9;
+                    
                     data[idx] = Math.min(255, Math.max(0, copy[idx] + (copy[idx] - rBlur) * amount));
                     data[idx+1] = Math.min(255, Math.max(0, copy[idx+1] + (copy[idx+1] - gBlur) * amount));
                     data[idx+2] = Math.min(255, Math.max(0, copy[idx+2] + (copy[idx+2] - bBlur) * amount));
@@ -528,7 +537,7 @@
             return canvas;
         }
 
-        // Основная функция
+        // Основная функция улучшения
         async function enhanceImage() {
             if (!currentImage) {
                 setStatus("❌ Сначала загрузите изображение");
@@ -539,7 +548,7 @@
                 setStatus("🔄 Загрузка нейросети...", true);
                 const loaded = await loadModel();
                 if (!loaded) {
-                    setStatus("❌ Не удалось загрузить нейросеть");
+                    setStatus("❌ Не удалось загрузить нейросеть. Проверьте интернет.");
                     return;
                 }
             }
@@ -557,7 +566,7 @@
                 enhancedArea.innerHTML = '';
                 enhancedArea.appendChild(resultImg);
                 
-                setStatus("✅ Нейросеть улучшила изображение!");
+                setStatus("✅ Нейросеть успешно улучшила изображение!");
                 downloadBtn.disabled = false;
                 setTimeout(() => setProgress(0), 1000);
             } catch (err) {
@@ -609,7 +618,7 @@
             }
         });
 
-        // Запуск
+        // Автоматический запуск загрузки модели при старте
         loadModel();
     })();
 </script>

@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>AI Neural Upscaler — 720p → FHD 4x</title>
-    <!-- TensorFlow.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <title>AI Neural Upscaler — ESRGAN 4x (полная версия)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -166,18 +165,18 @@
     <div class="loading-card">
         <div class="loading-title">🧠 AI Neural Upscaler</div>
         <div class="loading-progress"><div class="loading-progress-fill" id="loadingFill"></div></div>
-        <div class="loading-status" id="loadingText">Загрузка нейросети ESRGAN...</div>
-        <div class="info-note" style="margin-top:1rem;">Super Resolution 4x · 720p → 4K</div>
+        <div class="loading-status" id="loadingText">Загрузка нейросети ESRGAN-thick...</div>
+        <div class="info-note" style="margin-top:1rem;">Модель ~12MB · Увеличение 4x</div>
     </div>
 </div>
 
 <div class="container" id="main" style="opacity:0; transition:opacity 0.5s;">
     <h1>🖼️ AI Neural Upscaler 4x</h1>
     <div class="badge">
-        <span>🧠 ESRGAN нейросеть</span>
-        <span>📈 720p → FHD / 4K</span>
+        <span>🧠 ESRGAN-thick (12MB)</span>
+        <span>📈 720p → 4K</span>
         <span>🔒 Локальная обработка</span>
-        <span>⚡ Реальное улучшение</span>
+        <span>⚡ WebGL ускорение</span>
     </div>
 
     <div class="split-view">
@@ -198,21 +197,23 @@
         </div>
     </div>
     <div class="info-note">
-        🧠 Нейросеть <strong>ESRGAN</strong> — реальное увеличение разрешения в 4 раза с дорисовкой деталей.<br>
-        📦 Модель загружается с официального CDN. 720p → 2880p (почти 4K)!
+        🧠 Нейросеть <strong>ESRGAN-thick</strong> — самая качественная модель для увеличения разрешения.<br>
+        📦 Модель загружается с официального CDN jsDelivr. 720p → 2880p (почти 4K)! <strong>Полностью бесплатно</strong>.
     </div>
 </div>
 
 <script type="importmap">
     {
         "imports": {
-            "upscaler": "https://unpkg.com/upscaler@1.0.0-beta.10/dist/upscaler.min.js"
+            "upscaler": "https://cdn.jsdelivr.net/npm/upscaler@1.0.0-beta.13/dist/upscaler.min.js",
+            "@upscalerjs/esrgan-thick": "https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-thick@1.0.0-beta.4/dist/standalone.js"
         }
     }
 </script>
 
 <script type="module">
     import Upscaler from 'upscaler';
+    import x4Model from '@upscalerjs/esrgan-thick';
     
     // DOM элементы
     const fileInput = document.getElementById('fileInput');
@@ -246,30 +247,30 @@
         if (loadingText) loadingText.innerText = text;
     }
 
-    // Загрузка модели ESRGAN через UpscalerJS
+    // Загрузка модели ESRGAN-thick (12MB, максимальное качество)
     async function loadModel() {
         if (modelReady) return true;
         
         updateLoading(10, "Инициализация TensorFlow.js...");
         await tf.ready();
         
-        updateLoading(20, "Загрузка нейросети ESRGAN 4x...");
+        updateLoading(20, "Загрузка нейросети ESRGAN-thick (12MB)...");
         
         try {
-            // Создаём экземпляр Upscaler с моделью ESRGAN
+            // Создаём экземпляр Upscaler с 4x моделью ESRGAN-thick
             upscaler = new Upscaler({
-                model: 'https://unpkg.com/@upscalerjs/esrgan-slim@1.0.0-beta.10/dist/model.json'
+                model: x4Model
             });
             
             // Ждём загрузки модели
             await upscaler.loadModel();
             
             modelReady = true;
-            updateLoading(100, "Нейросеть ESRGAN готова к работе!");
+            updateLoading(100, "Нейросеть ESRGAN-thick готова!");
             setTimeout(() => {
                 loadingOverlay.classList.add('hidden');
                 main.style.opacity = '1';
-                setStatus("✅ Нейросеть ESRGAN загружена! Загрузите фото для улучшения.");
+                setStatus("✅ Нейросеть ESRGAN-thick загружена! Загрузите фото для улучшения.");
             }, 500);
             return true;
         } catch (err) {

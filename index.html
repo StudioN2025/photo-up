@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>AI Upscaler — Real-ESRGAN (рабочая версия)</title>
+    <title>AI Photo Enhancer — Нейросетевое улучшение</title>
+    <!-- Подключаем TensorFlow.js и UpscalerJS -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/upscaler@1.0.0/dist/upscaler.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -91,7 +93,7 @@
             justify-content: center;
             align-items: center;
             min-height: 320px;
-            overflow: hidden;
+            overflow: auto;
             box-shadow: inset 0 1px 4px #00000030, 0 4px 12px rgba(0,0,0,0.3);
         }
 
@@ -212,6 +214,7 @@
             .panel { padding: 0.9rem; }
         }
 
+        /* Загрузочный экран */
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -275,42 +278,58 @@
 </head>
 <body>
 
+<!-- ЗАГРУЗОЧНЫЙ ЭКРАН -->
 <div class="loading-overlay" id="loadingOverlay">
     <div class="loading-card">
-        <div class="loading-title">✨ AI Upscaler</div>
+        <div class="loading-title">🧠 AI Photo Enhancer</div>
         <div class="loading-progress"><div class="loading-progress-fill" id="loadingFill"></div></div>
-        <div class="loading-status" id="loadingText">Загрузка модели...</div>
-        <div class="info-note" style="margin-top:1rem;">Real-ESRGAN · 4x увеличение</div>
+        <div class="loading-status" id="loadingText">Загрузка нейросети...</div>
+        <div class="info-note" style="margin-top:1rem;">ESRGAN · 4x увеличение · Работает локально</div>
     </div>
 </div>
 
+<!-- ОСНОВНОЙ ИНТЕРФЕЙС -->
 <div class="container" id="main" style="opacity:0; transition:opacity 0.5s;">
-    <h1>🖼️ AI Image Upscaler 4x</h1>
-    <div class="badge"><span>⚡ Real-ESRGAN</span><span>📈 Супер-разрешение</span><span>🔒 Локально</span></div>
+    <h1>🖼️ AI Photo Enhancer</h1>
+    <div class="badge">
+        <span>🧠 Нейросеть ESRGAN</span>
+        <span>📈 Увеличение 4x</span>
+        <span>🔒 Локальная обработка</span>
+        <span>⚡ WebGL ускорение</span>
+    </div>
 
     <div class="split-view">
         <div class="panel">
             <div class="panel-title">📷 Оригинал</div>
             <label class="upload-btn" id="uploadLabel">📂 Загрузить PNG / JPG</label>
-            <input type="file" id="fileInput" accept="image/png, image/jpeg, image/jpg">
-            <div class="image-area" id="originalArea"><div class="placeholder">⬅️ Загрузите фото</div></div>
+            <input type="file" id="fileInput" accept="image/png, image/jpeg, image/jpg" style="display: none;">
+            <div class="image-area" id="originalArea">
+                <div class="placeholder">⬅️ Нажмите выше, чтобы выбрать фото</div>
+            </div>
         </div>
 
         <div class="panel">
-            <div class="panel-title">✨ Улучшенное (4x)</div>
-            <div class="image-area" id="enhancedArea"><div class="placeholder">⚡ Результат</div></div>
-            <button id="enhanceBtn" disabled>🚀 Увеличить и улучшить</button>
-            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            <div class="panel-title">✨ Улучшенное (нейросеть)</div>
+            <div class="image-area" id="enhancedArea">
+                <div class="placeholder">⚡ Результат появится после обработки</div>
+            </div>
+            <button id="enhanceBtn" disabled>🚀 Улучшить качество (нейросеть)</button>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
             <button id="downloadBtn" class="download-btn" disabled>💾 Скачать PNG</button>
-            <div id="statusMsg" class="status">✅ Готов</div>
+            <div id="statusMsg" class="status">✅ Готов к работе</div>
         </div>
     </div>
-    <div class="info-note">Работает с любыми размерами. При первом запуске загружается модель (~7MB).</div>
+    <div class="info-note">
+        🧠 Используется нейросеть <strong>ESRGAN</strong> (Enhanced Super-Resolution GAN) — увеличение в 4x с восстановлением деталей.<br>
+        📦 При первом запуске загружается модель (~10 МБ), после этого работает офлайн. Обработка происходит локально в браузере.
+    </div>
 </div>
 
 <script>
     (function() {
-        // Элементы
+        // DOM элементы
         const fileInput = document.getElementById('fileInput');
         const uploadLabel = document.getElementById('uploadLabel');
         const originalArea = document.getElementById('originalArea');
@@ -325,14 +344,10 @@
         const main = document.getElementById('main');
 
         let currentImage = null;
-        let currentCanvas = null;
-        let model = null;
+        let currentEnhancedDataUrl = null;
+        let upscaler = null;
         let modelReady = false;
 
-        // РАБОЧАЯ МОДЕЛЬ ESRGAN 4x (принимает любые размеры)
-        const MODEL_URL = 'https://tfhub.dev/caption-contest/esrgan-tf2/1?tfjs-format=compressed';
-        
-        // Функции интерфейса
         function setStatus(text, loading = false) {
             statusDiv.innerHTML = loading ? `<span class="loader"></span> ${text}` : text;
         }
@@ -346,174 +361,111 @@
             if (loadingText) loadingText.innerText = text;
         }
 
-        // Загрузка модели
+        // Загрузка модели через UpscalerJS
         async function loadModel() {
             if (modelReady) return true;
             
-            updateLoading(5, "Инициализация TensorFlow...");
+            updateLoading(10, "Инициализация TensorFlow.js...");
             await tf.ready();
             
-            updateLoading(15, "Загрузка модели ESRGAN (7MB)...");
+            updateLoading(30, "Загрузка нейросети ESRGAN...");
             
             try {
-                // Используем другой URL - более стабильный
-                const altUrl = 'https://raw.githubusercontent.com/saeed349/ESRGAN-tfjs/main/model/model.json';
+                // Создаем экземпляр Upscaler с моделью ESRGAN
+                // UpscalerJS автоматически загружает модель с официального CDN
+                upscaler = new Upscaler();
                 
-                let loadAttempt = false;
-                try {
-                    model = await tf.loadGraphModel(altUrl, {
-                        onProgress: (f) => updateLoading(15 + Math.round(f * 70), `Загрузка: ${Math.round(f*100)}%`)
-                    });
-                    loadAttempt = true;
-                } catch(e) {
-                    console.warn("Первая ссылка не работает, пробуем запасную:", e);
-                }
-                
-                if (!loadAttempt) {
-                    // Вторая попытка - используем встроенную легкую модель для демо
-                    updateLoading(50, "Используем оптимизированную модель...");
-                    // Создадим простую нейросеть для демонстрации (upscale + sharpen)
-                    // Это полноценная работающая альтернатива
-                    model = await createFallbackModel();
-                }
+                // Ждем загрузки модели
+                await upscaler.loadModel();
                 
                 modelReady = true;
-                updateLoading(100, "Готово!");
+                updateLoading(100, "Нейросеть готова!");
                 setTimeout(() => {
                     loadingOverlay.classList.add('hidden');
                     main.style.opacity = '1';
-                    setStatus("✅ Модель готова! Загрузите изображение.");
-                }, 500);
+                    setStatus("✅ Нейросеть ESRGAN загружена! Загрузите фото.");
+                }, 800);
                 return true;
-            } catch(err) {
-                console.error("Ошибка:", err);
-                updateLoading(0, "Ошибка загрузки, использую встроенный улучшатель");
+            } catch (err) {
+                console.error("Ошибка загрузки модели:", err);
+                updateLoading(0, "Ошибка загрузки модели. Проверьте интернет.");
                 setTimeout(() => {
                     loadingOverlay.classList.add('hidden');
                     main.style.opacity = '1';
-                    setStatus("⚠️ Используется классический улучшатель (нейросеть недоступна)");
-                }, 1000);
+                    setStatus("⚠️ Ошибка загрузки нейросети. Обновите страницу.");
+                }, 2000);
                 return false;
             }
         }
 
-        // Фолбэк-модель (улучшение через классические алгоритмы)
-        async function createFallbackModel() {
-            // Создаем "фейковую" модель, которая просто возвращает вход
-            return {
-                predict: (tensor) => {
-                    // Возвращаем увеличенный через интерполяцию тензор
-                    return tf.tidy(() => {
-                        const [batch, h, w, c] = tensor.shape;
-                        const resized = tf.image.resizeBilinear(tensor, [h * 2, w * 2]);
-                        // Легкое повышение резкости
-                        return resized;
-                    });
-                }
-            };
-        }
-
-        // Преобразование изображения в тензор
-        function imgToTensor(img) {
-            return tf.browser.fromPixels(img).toFloat().div(255).expandDims(0);
-        }
-
-        // Обработка изображения
-        async function enhanceImage() {
-            if (!currentImage) {
-                setStatus("❌ Сначала загрузите изображение");
-                return;
+        // Улучшение изображения через нейросеть
+        async function enhanceWithNeuralNetwork(imageElement) {
+            if (!upscaler || !modelReady) {
+                throw new Error("Нейросеть не загружена");
             }
             
-            enhanceBtn.disabled = true;
-            enhanceBtn.textContent = "⏳ Обработка...";
-            setProgress(10);
-            setStatus("🎨 Нейросеть обрабатывает...", true);
+            setStatus("🧠 Нейросеть обрабатывает изображение...", true);
+            setProgress(20);
             
-            try {
-                const inputTensor = imgToTensor(currentImage);
-                setProgress(30);
-                
-                let outputTensor;
-                if (model && model.predict) {
-                    outputTensor = await model.predict(inputTensor);
-                } else {
-                    // Запасной вариант: простое увеличение с резкостью
-                    const [b, h, w, c] = inputTensor.shape;
-                    outputTensor = tf.image.resizeBilinear(inputTensor, [h * 2, w * 2]);
-                }
-                
-                setProgress(70);
-                
-                const squeezed = outputTensor.squeeze(0);
-                const mul = squeezed.mul(255);
-                const clipped = mul.clipByValue(0, 255);
-                const uint8 = clipped.toInt();
-                
-                const [height, width, channels] = uint8.shape;
-                const pixels = await uint8.data();
-                
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                const imgData = new ImageData(new Uint8ClampedArray(pixels), width, height);
-                ctx.putImageData(imgData, 0, 0);
-                
-                // Дополнительное улучшение резкости
-                const finalCanvas = applySmartSharpen(canvas);
-                
-                currentCanvas = finalCanvas;
-                
-                const resultImg = document.createElement('img');
-                resultImg.src = finalCanvas.toDataURL('image/png');
-                enhancedArea.innerHTML = '';
-                enhancedArea.appendChild(resultImg);
-                
-                setProgress(100);
-                setStatus("✅ Улучшение завершено! Изображение увеличено в 2-4 раза.");
-                downloadBtn.disabled = false;
-                
-                inputTensor.dispose();
-                outputTensor.dispose();
-                squeezed.dispose();
-                mul.dispose();
-                clipped.dispose();
-                uint8.dispose();
-                
-                setTimeout(() => setProgress(0), 1000);
-            } catch(err) {
-                console.error("Ошибка:", err);
-                setStatus("❌ Ошибка обработки. Попробуйте другое изображение.");
-                setProgress(0);
-            } finally {
-                enhanceBtn.disabled = false;
-                enhanceBtn.textContent = "🚀 Увеличить и улучшить";
-            }
+            // Создаем canvas из изображения
+            const canvas = document.createElement('canvas');
+            canvas.width = imageElement.width;
+            canvas.height = imageElement.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(imageElement, 0, 0);
+            
+            setProgress(40);
+            
+            // Запускаем нейросеть для увеличения
+            // UpscalerJS увеличивает изображение в 2 раза за проход
+            let result = canvas;
+            
+            // Первое увеличение (до 2x)
+            setStatus("🧠 Увеличение до 2x...", true);
+            const upscaled1 = await upscaler.upscale(result, {
+                progress: (p) => setProgress(40 + p * 25)
+            });
+            result = upscaled1;
+            
+            // Второе увеличение (до 4x)
+            setStatus("🧠 Увеличение до 4x...", true);
+            const upscaled2 = await upscaler.upscale(result, {
+                progress: (p) => setProgress(65 + p * 25)
+            });
+            result = upscaled2;
+            
+            setProgress(95);
+            setStatus("✨ Применение финальной обработки...", true);
+            
+            // Дополнительное повышение резкости
+            const finalCanvas = applySmartSharpen(result);
+            
+            setProgress(100);
+            return finalCanvas;
         }
-
-        // Улучшение резкости
+        
+        // Улучшение резкости (постобработка)
         function applySmartSharpen(canvas) {
             const ctx = canvas.getContext('2d');
-            const w = canvas.width, h = canvas.height;
+            const w = canvas.width;
+            const h = canvas.height;
             const imageData = ctx.getImageData(0, 0, w, h);
             const data = imageData.data;
             
-            // Простое нерезкое маскирование
+            // Легкое повышение резкости (unsharp mask)
             const copy = new Uint8ClampedArray(data);
-            const amount = 0.5;
+            const amount = 0.4;
             
-            for (let y = 1; y < h-1; y++) {
-                for (let x = 1; x < w-1; x++) {
+            for (let y = 1; y < h - 1; y++) {
+                for (let x = 1; x < w - 1; x++) {
                     const idx = (y * w + x) * 4;
-                    // Размытие 3x3
                     let rBlur = 0, gBlur = 0, bBlur = 0;
                     for (let dy = -1; dy <= 1; dy++) {
                         for (let dx = -1; dx <= 1; dx++) {
-                            const nIdx = ((y+dy) * w + (x+dx)) * 4;
+                            const nIdx = ((y + dy) * w + (x + dx)) * 4;
                             rBlur += copy[nIdx];
-                            gBlur += copy[nIdx+1];
-                            bBlur += copy[nIdx+2];
+                            gBlur += copy[nIdx + 1];
+                            bBlur += copy[nIdx + 2];
                         }
                     }
                     rBlur /= 9; gBlur /= 9; bBlur /= 9;
@@ -528,6 +480,51 @@
             return canvas;
         }
 
+        // Основная функция улучшения
+        async function enhanceImage() {
+            if (!currentImage) {
+                setStatus("❌ Сначала загрузите изображение");
+                return;
+            }
+            
+            if (!modelReady) {
+                setStatus("🔄 Загрузка нейросети...", true);
+                const loaded = await loadModel();
+                if (!loaded) {
+                    setStatus("❌ Не удалось загрузить нейросеть. Обновите страницу.");
+                    return;
+                }
+            }
+            
+            enhanceBtn.disabled = true;
+            enhanceBtn.textContent = "⏳ Нейросеть работает...";
+            downloadBtn.disabled = true;
+            setProgress(0);
+            
+            try {
+                const resultCanvas = await enhanceWithNeuralNetwork(currentImage);
+                
+                // Отображаем результат
+                const resultImg = document.createElement('img');
+                currentEnhancedDataUrl = resultCanvas.toDataURL('image/png');
+                resultImg.src = currentEnhancedDataUrl;
+                enhancedArea.innerHTML = '';
+                enhancedArea.appendChild(resultImg);
+                
+                setProgress(100);
+                setStatus("✅ Нейросеть улучшила изображение! Увеличение в 4x.");
+                downloadBtn.disabled = false;
+                setTimeout(() => setProgress(0), 1500);
+            } catch (err) {
+                console.error("Ошибка:", err);
+                setStatus("❌ Ошибка обработки нейросетью. Попробуйте другое изображение.");
+                setProgress(0);
+            } finally {
+                enhanceBtn.disabled = false;
+                enhanceBtn.textContent = "🚀 Улучшить качество (нейросеть)";
+            }
+        }
+
         // Загрузка файла
         function loadFile(file) {
             const reader = new FileReader();
@@ -535,15 +532,15 @@
                 const img = new Image();
                 img.onload = () => {
                     currentImage = img;
-                    currentCanvas = null;
+                    currentEnhancedDataUrl = null;
                     originalArea.innerHTML = '';
                     const display = document.createElement('img');
                     display.src = e.target.result;
                     originalArea.appendChild(display);
-                    enhancedArea.innerHTML = '<div class="placeholder">⚡ Нажмите «Увеличить»</div>';
+                    enhancedArea.innerHTML = '<div class="placeholder">⚡ Нажмите «Улучшить» для обработки нейросетью</div>';
                     enhanceBtn.disabled = false;
                     downloadBtn.disabled = true;
-                    setStatus(`✅ ${img.width}x${img.height} пикселей`);
+                    setStatus(`✅ ${img.width}x${img.height} пикселей. Нажмите кнопку для улучшения.`);
                 };
                 img.src = e.target.result;
             };
@@ -551,21 +548,25 @@
         }
 
         fileInput.addEventListener('change', (e) => {
-            if (e.target.files?.[0]) loadFile(e.target.files[0]);
+            if (e.target.files && e.target.files[0]) {
+                loadFile(e.target.files[0]);
+            }
         });
+        
         uploadLabel.addEventListener('click', () => fileInput.click());
         enhanceBtn.addEventListener('click', enhanceImage);
+        
         downloadBtn.addEventListener('click', () => {
-            if (currentCanvas) {
+            if (currentEnhancedDataUrl) {
                 const link = document.createElement('a');
-                link.download = `upscaled_${Date.now()}.png`;
-                link.href = currentCanvas.toDataURL('image/png');
+                link.download = `enhanced_${Date.now()}.png`;
+                link.href = currentEnhancedDataUrl;
                 link.click();
-                setStatus("💾 Скачивание...");
+                setStatus("💾 Скачивание началось!");
             }
         });
 
-        // Запуск
+        // Запуск загрузки модели
         loadModel();
     })();
 </script>
